@@ -13,7 +13,11 @@ repositories {
 }
 
 ext {
-    smackVersion = '4.1.9'
+    smackVersion = '4.2.0'
+}
+
+tasks.withType(Checkstyle) {
+    exclude '**/org/jivesoftware/**'
 }
 
 checkstyle {

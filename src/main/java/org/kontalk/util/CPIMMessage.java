@@ -1,6 +1,6 @@
 /*
  * Kontalk client common library
- * Copyright (C) 2016 Kontalk Devteam <devteam@kontalk.org>
+ * Copyright (C) 2017 Kontalk Devteam <devteam@kontalk.org>
 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,8 +22,11 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.StringReader;
 import java.io.UnsupportedEncodingException;
+import java.text.DateFormat;
 import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.TimeZone;
 
 import org.jxmpp.util.XmppDateTime;
 
@@ -41,6 +44,36 @@ import org.jxmpp.util.XmppDateTime;
  * @author Daniele Ricci
  */
 public class CPIMMessage {
+
+    private static final DateTimeNoMillisFormatter dateTimeNoMillisFormatter = new DateTimeNoMillisFormatter();
+
+    private static class DateTimeNoMillisFormatter {
+
+        private final String FORMAT_STRING = "yyyy-MM-dd'T'HH:mm:ssZ";
+        private final DateFormat FORMATTER;
+
+        private DateTimeNoMillisFormatter() {
+            FORMATTER = new SimpleDateFormat(FORMAT_STRING);
+            FORMATTER.setTimeZone(TimeZone.getTimeZone("UTC"));
+        }
+
+        private String format(Date date) {
+            String res;
+            synchronized (FORMATTER) {
+                res = FORMATTER.format(date);
+            }
+            res = convertRfc822TimezoneToXep82(res);
+            return res;
+        }
+
+        private static String convertRfc822TimezoneToXep82(String dateString) {
+            int length = dateString.length();
+            String res = dateString.substring(0, length - 2);
+            res += ':';
+            res += dateString.substring(length - 2, length);
+            return res;
+        }
+    }
 
     /** Charset used for byte encoding. */
     public static final String CHARSET = "utf-8";
@@ -91,8 +124,8 @@ public class CPIMMessage {
 
     public String toString() {
         if (mBuf == null) {
-            String date = XmppDateTime.DateFormatType
-                .XEP_0082_DATETIME_PROFILE.format(mDate);
+            // format to XEP-0082 date without millieconds for clients using Smack < 4.2.0
+            String date = dateTimeNoMillisFormatter.format(mDate);
 
             StringBuilder to = new StringBuilder();
             for(String item : mTo){
@@ -137,7 +170,7 @@ public class CPIMMessage {
         // first pass: CPIM content type
         CPIMParser.CPIMHeader h;
         boolean typeOk = false;
-        while ((h = p.nextHeader()) != null || !typeOk) {
+        while ((h = p.nextHeader()) != null && !typeOk) {
             if ("Content-type".equalsIgnoreCase(h.name) && TYPE.equalsIgnoreCase(h.value))
                 typeOk = true;
         }
@@ -180,8 +213,7 @@ public class CPIMMessage {
         Date parsedDate = null;
         try {
             if (date != null) {
-                parsedDate = XmppDateTime.DateFormatType
-                    .XEP_0082_DATETIME_PROFILE.parse(date);
+                parsedDate = XmppDateTime.parseXEP0082Date(date);
             }
         }
         catch (ParseException ignored) {
